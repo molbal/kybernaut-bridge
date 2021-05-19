@@ -1,10 +1,26 @@
 var path = require('path');
 var WebSocketClient = require('websocket').client;
 var express = require('express');
+var axios = require('axios').default;
 
 var app = express();
 
 var client = new WebSocketClient();
+
+if (!process.env.HOST_URL) {
+   console.error("HOST_URL environment variable is unset.");
+   process.exit(2);
+}
+
+if (!process.env.PASSCODE) {
+   console.error("PASSCODE environment variable is unset.");
+   process.exit(2);
+}
+
+if (!process.env.REGION_IDS) {
+   console.error("REGION_IDS environment variable is unset.");
+   process.exit(2);
+}
 
 
 client.on('connectFailed', function(error) {
@@ -16,6 +32,7 @@ client.on('connect', function(connection) {
    console.log('WebSocket Client Connected');
    connection.on('error', function(error) {
       console.log("Connection Error: " + error.toString());
+      process.exit(1);
    });
    connection.on('close', function() {
       console.log('Connection Closed');
@@ -26,12 +43,13 @@ client.on('connect', function(connection) {
       if (message.type === 'utf8') {
          console.log("Received: '" + message.utf8Data + "'");
          
+      
          axios.post(process.env.HOST_URL, {
             killmail: message,
             passcode: process.env.PASSCODE
          })
          .then(res => {
-            console.log(`statusCode: ${res.statusCode}`)
+            console.log(`Sent littlekill to Abyss Tracker - statusCode: ${res.statusCode}`)
             console.log(res)
          })
          .catch(error => {
@@ -41,10 +59,10 @@ client.on('connect', function(connection) {
    });
    
    
-   var regionIds = [10000002,12000001, 12000002,12000003,12000004,12000005];
+   var regionIds = process.env.REGION_IDS.split(';');
    regionIds.forEach(regionId => {    
       console.log('Subscribing to region '+regionId)
-      connection.sendUTF('{"action":"sub","channel":"region:'+12000005+'"}');
+      connection.sendUTF('{"action":"sub","channel":"region:'+regionId+'"}');
       
    });
 });
