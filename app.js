@@ -40,59 +40,68 @@ if (process.env.ZKILLBOARD_HOST) {
    zkillHost = process.env.ZKILLBOARD_HOST;
 }
 
+var connectFailed = (error) => {
+   console.log('Connect Error: ' + error.toString() + " - exiting.");
+   process.exit(1);
+};
 
-client.on('connectFailed', (error) => {
-      console.log('Connect Error: ' + error.toString() + " - exiting.");
-      process.exit(1);
+var connectHandler = (connection) => {
+   console.timeEnd("Websocket connecting");
+   console.log('Connected to ' + zkillHost + ' via websocket.');
+   connection.on('error', function (error) {
+      console.log((new Date().toISOString().replace(/T/, ' ').replace(/\..+/, '')) + " Connection Error: " + error.toString() + " - reconnecting");
+      client.connect(zkillHost);
    });
 
-client.on('connect', (connection) => {
-      console.log('Connected to ' + zkillHost + ' via websocket.');
-      connection.on('error', function (error) {
-         console.log((new Date().toISOString().replace(/T/, ' ').replace(/\..+/, ''))+ " Connection Error: " + error.toString());
-         process.exit(3);
-      });
-
-
-      connection.on('close', () => {
-            console.log((new Date().toISOString().replace(/T/, ' ').replace(/\..+/, ''))+ " Connection Closed - reconnecting.");
-            client.connect(zkillHost);
-            // process.exit(4);
-         });
-      connection.on('message', (message) => {
-            if (message.type === 'utf8') {
-
-               var message_id = uuidv4();
-               console.time('Message processing ' + message_id);
-               //        console.log("Received: '" + message.utf8Data + "'");
-               axios.post(process.env.HOST_URL, {
-                  killmail: message,
-                  passcode: process.env.PASSCODE
-               })
-                  .then(res => {
-                     console.timeEnd('Message processing ' + message_id);
-                  })
-                  .catch(error => {
-                     console.error('Could not send littlekill to Abyss Tracker - ' + error.message);
-                     console.error(error.response.data ? error.response.data : "Unknown error");
-                     console.timeEnd('Message processing ' + message_id);
-                  });
-            }
-         });
-
-      console.time("Channels subscribing");
-      var regionIds = process.env.REGION_IDS.split(';');
-      regionIds.forEach(regionId => {
-         console.log('Subscribing to region ' + regionId);
-         connection.sendUTF('{"action":"sub","channel":"region:' + regionId + '"}');
-      });
-      console.timeEnd("Channels subscribing");
-      console.log((new Date().toISOString().replace(/T/, ' ').replace(/\..+/, ''))+ " Kybernaut bridge is up and connected.");
+   connection.on('close', () => {
+      console.log((new Date().toISOString().replace(/T/, ' ').replace(/\..+/, '')) + " Connection Closed - reconnecting.");
+      client.connect(zkillHost);
    });
+
+   connection.on('message', (message) => {
+      if (message.type === 'utf8') {
+
+         var message_id = uuidv4();
+         console.time('Message processing ' + message_id);
+         //        console.log("Received: '" + message.utf8Data + "'");
+         axios.post(process.env.HOST_URL, {
+            killmail: message,
+            passcode: process.env.PASSCODE
+         })
+            .then(res => {
+               console.timeEnd('Message processing ' + message_id);
+            })
+            .catch(error => {
+               console.error('Could not send littlekill to Abyss Tracker - ' + error.message);
+               console.error(error.response.data ? error.response.data : "Unknown error");
+               console.timeEnd('Message processing ' + message_id);
+            });
+      }
+   });
+
+   console.time("Channels subscribing");
+   var regionIds = process.env.REGION_IDS.split(';');
+   regionIds.forEach(regionId => {
+      console.log('Subscribing to region ' + regionId);
+      connection.sendUTF('{"action":"sub","channel":"region:' + regionId + '"}');
+   });
+   console.timeEnd("Channels subscribing");
+   console.log((new Date().toISOString().replace(/T/, ' ').replace(/\..+/, '')) + " Kybernaut bridge is up and connected.");
+};
+
+client.on('connectFailed', connectFailed);
+client.on('connect', connectHandler);
    
 console.time("Websocket connecting");
 client.connect(zkillHost);
-console.timeEnd("Websocket connecting");
 
+process.on('uncaughtException', (err) => {
+      console.log((new Date().toISOString().replace(/T/, ' ').replace(/\..+/, '')) + "- Resetting application " - err.toString());
+      var client = new WebSocketClient();
+      client.on('connectFailed', connectFailed);
+      client.on('connect', connectHandler);
+      console.time("Websocket connecting");
+      client.connect(zkillHost);
+   });
 
 module.exports = app;
